@@ -1,0 +1,321 @@
+
+
+define
+
+##################################################
+# relations to describe FDs
+##################################################
+
+  edge sub relation,
+    relates parent,
+    relates child;
+
+  option-edge sub edge,
+    relates option-parent as parent,
+    relates option-child as child,
+    has link-type;
+
+  link-type sub attribute,
+    datatype string,
+    regex "(mandatory|optional)";
+
+
+##############################################################
+# relations to express semantics of FD nodes wrt the dataset
+##############################################################
+
+  performed-activity-through-event sub relation, abstract,
+    relates performed-activity,
+    relates observed-event;
+
+  work-day-performed sub performed-activity-through-event,
+    relates performed-work-day as performed-activity,
+    relates event-work-day as observed-event;
+
+  morning-performed sub performed-activity-through-event,
+    relates performed-morning as performed-activity,
+    relates event-morning as observed-event;
+
+  evening-performed sub performed-activity-through-event,
+    relates performed-evening as performed-activity,
+    relates event-evening as observed-event;
+
+  breakfast-performed sub performed-activity-through-event,
+    relates performed-breakfast as performed-activity,
+    relates event-breakfast as observed-event;
+
+  early-breakfast-performed sub performed-activity-through-event,
+    relates performed-early-breakfast as performed-activity,
+    relates event-early-breakfast as observed-event;
+
+  late-breakfast-performed sub performed-activity-through-event,
+    relates performed-late-breakfast as performed-activity,
+    relates event-late-breakfast as observed-event;
+
+  evening-work-performed sub performed-activity-through-event,
+    relates performed-evening-work as performed-activity,
+    relates event-evening-work as observed-event;
+
+  evening-medicine-performed sub performed-activity-through-event,
+    relates performed-evening-medicine as performed-activity,
+    relates event-evening-medicine as observed-event;
+
+  earlier-eatingdrinking-performed sub relation,
+    relates early-eating,
+    relates late-eating;
+
+
+
+##################################################
+# entity to describe the nodes of FDs
+##################################################
+
+
+  activity sub entity,
+    plays parent,
+    plays option-parent,
+    plays child,
+    plays option-child,
+    plays performed-work-day,
+    plays performed-morning,
+    plays performed-evening,
+    plays performed-breakfast,
+    plays performed-early-breakfast,
+    plays performed-late-breakfast,
+    plays performed-evening-work,
+    plays performed-evening-medicine,
+    plays performed-activity,
+    has activity-name,
+    has node-type;
+
+  activity-name sub attribute,
+    datatype string;
+  node-type sub attribute,
+    datatype string,
+    regex "(option|or|xor)";
+
+###############################################################
+# entity to describe activity events in the data
+###############################################################
+
+  activity-event sub entity,
+    has event-name,
+    has transition,
+    has event-date,
+    has hours,
+    has minutes,
+    has trace-id,
+    has day-type,
+    has person-id,
+    plays observed-event,
+    plays event-work-day,
+    plays event-morning,
+    plays event-evening,
+    plays event-breakfast,
+    plays event-early-breakfast,
+    plays event-late-breakfast,
+    plays event-evening-medicine,
+    plays event-evening-work,
+    plays early-eating,
+    plays late-eating;
+
+  event-name sub attribute,
+    datatype string,
+    regex "(Start|End|personalhygiene|sleep|toilet|eatingdrinking|cleaning|dress|watchtv|outdoors|snack|work|mealpreperation|medication|relax|phone|groom|bathe|entertainguests)";
+  transition sub attribute,
+    datatype string,
+    regex "(start|complete)";
+  event-date sub attribute,
+    datatype date;
+  hours sub attribute,
+    datatype long;
+  minutes sub attribute,
+    datatype long;
+  trace-id sub attribute,
+    datatype long;
+  day-type sub attribute,
+    datatype string,
+    regex "(work-day|weekend)";
+  person-id sub attribute,
+    datatype string;
+
+############################################################################
+# delete statements to clean the inserted events to avoid double insertions
+############################################################################
+
+  match $x isa activity-event; delete $x;
+  match $x isa event-name; delete $x;
+  match $x isa transition; delete $x;
+  match $x isa event-date; delete $x;
+  match $x isa hours; delete $x;
+  match $x isa minutes; delete $x;
+  match $x isa trace-id; delete $x;
+  match $x isa day-type; delete $x;
+  match $x isa person-id; delete $x;
+
+
+
+############################################################################
+# rules to define the semantics of nodes of the work-day FD wrt the dataset
+############################################################################
+
+define
+
+  work-day-performed-rule sub rule,
+  when {
+    $a isa activity, has activity-name "work-day";
+    $e isa activity-event, has transition "start", has day-type "work-day", has event-name $n;
+    not { $n == "End";};
+    #$e has event-date $d;
+  #  $e2 isa activity-event, has event-name "Start", has event-date $d;
+  },
+  then {
+    (performed-work-day: $a, event-work-day: $e) isa work-day-performed;
+    };
+
+### part of day nodes
+
+  morning-performed-rule sub rule,
+  when {
+    $wdp (performed-work-day: $a, event-work-day: $e) isa work-day-performed;
+    $e has hours $h;
+    $h >= 6; $h < 12;
+    $b isa activity, has activity-name "morning";
+  },
+  then {
+    (performed-morning: $b, event-morning: $e) isa morning-performed;
+    };
+
+  evening-performed-rule sub rule,
+  when {
+    $wdp (performed-work-day: $a, event-work-day: $e) isa work-day-performed;
+    $e has hours $h;
+    $h >= 17;
+    $b isa activity, has activity-name "evening";
+  },
+  then {
+    (performed-evening: $b, event-evening: $e) isa evening-performed;
+    };
+
+
+#### breakfast nodes
+
+  breakfast-performed-rule sub rule,
+  when {
+    $e isa activity-event;
+    $wdp (performed-work-day: $a, event-work-day: $e) isa work-day-performed;
+    $mp (performed-morning: $b, event-morning: $e) isa morning-performed;
+    $e has event-name "eatingdrinking";
+    $c isa activity, has activity-name "breakfast";
+  },
+  then {
+    (performed-breakfast: $c, event-breakfast: $e) isa breakfast-performed;
+    };
+
+  early-breakfast-performed-rule sub rule,
+  when {
+    $e isa activity-event;
+    $wdp (performed-work-day: $a, event-work-day: $e) isa work-day-performed;
+    $mp (performed-morning: $b, event-morning: $e) isa morning-performed;
+    $bp (performed-breakfast: $c, event-breakfast: $e) isa breakfast-performed;
+    $e has hours $h; $h < 9;
+    $d isa activity, has activity-name "early-breakfast";
+  },
+  then {
+    (performed-early-breakfast: $d, event-early-breakfast: $e) isa early-breakfast-performed;
+    };
+
+  late-breakfast-performed-rule sub rule,
+  when {
+    $e isa activity-event;
+    $wdp (performed-work-day: $a, event-work-day: $e) isa work-day-performed;
+    $mp (performed-morning: $b, event-morning: $e) isa morning-performed;
+    $bp (performed-breakfast: $c, event-breakfast: $e) isa breakfast-performed;
+    $e has hours $h; $h >= 9;
+    not {
+      (early-eating: $early, late-eating: $e) isa earlier-eatingdrinking-performed;
+    };
+    $d isa activity, has activity-name "late-breakfast";
+  },
+  then {
+    (performed-late-breakfast: $d, event-late-breakfast: $e) isa late-breakfast-performed;
+    };
+
+  earlier-eatingdrinking-performed-rule sub rule,
+  when {
+    $e1 isa activity-event, has event-name "eatingdrinking", has event-date $d, has hours $h1;
+    $e2 isa activity-event, has event-name "eatingdrinking", has event-date $d, has hours $h2;
+    $bp1 (performed-breakfast: $b, event-breakfast: $e1) isa breakfast-performed;
+    $bp2 (performed-breakfast: $b, event-breakfast: $e2) isa breakfast-performed;
+    $h1 < 9; $h2 >= 9;
+  },
+  then {
+    (early-eating: $e1, late-eating: $e2) isa earlier-eatingdrinking-performed;
+  };
+
+
+
+### evening nodes
+
+evening-work-performed-rule sub rule,
+when {
+  $e isa activity-event;
+  $wdp (performed-work-day: $a, event-work-day: $e) isa work-day-performed;
+  $ep (performed-evening: $b, event-evening: $e) isa evening-performed;
+  $e has event-name "work";
+  $c isa activity, has activity-name "evening-work";
+},
+then {
+  (performed-evening-work: $c, event-evening-work: $e) isa evening-work-performed;
+  };
+
+evening-medicine-performed-rule sub rule,
+when {
+  $e isa activity-event;
+  $wdp (performed-work-day: $a, event-work-day: $e) isa work-day-performed;
+  $ep (performed-evening: $b, event-evening: $e) isa evening-performed;
+  $e has event-name "medication";
+  $c isa activity, has activity-name "evening-medicine";
+},
+then {
+  (performed-evening-medicine: $c, event-evening-medicine: $e) isa evening-medicine-performed;
+  };
+
+
+
+############################################################################
+# delete statements to remove the inserted FD to avoid double insertions
+############################################################################
+
+  match $a isa activity; delete $a;
+  match $x isa activity-name; delete $x;
+  match $x isa node-type; delete $x;
+  match $x isa edge; delete $x;
+  match $x isa option-edge; delete $x;
+
+  match $x isa link-type; delete $x;
+
+
+############################################################################
+# insert statements to define the work-day FD for user hh104
+############################################################################
+
+  insert
+
+    $work-day isa activity, has activity-name "work-day", has node-type "option";
+    #branch morning-breakfast
+    $morning isa activity, has activity-name "morning", has node-type "or";
+    $wdm (option-parent: $work-day, option-child: $morning) isa option-edge, has link-type "mandatory";
+    $breakfast isa activity, has activity-name "breakfast", has node-type "xor";
+    $m-bf (option-parent: $morning, option-child: $breakfast) isa option-edge, has link-type "optional";
+    $early-bf isa activity, has activity-name "early-breakfast";
+    $late-bf isa activity, has activity-name "late-breakfast";
+    $bf-early (parent: $breakfast, child: $early-bf) isa edge;
+    $bf-late (parent: $breakfast, child: $late-bf) isa edge;
+    #branch evening work/medication
+    $evening isa activity, has activity-name "evening", has node-type "option";
+    $wde (option-parent: $work-day, option-child: $evening) isa option-edge, has link-type "mandatory";
+    $eve-medicine isa activity, has activity-name "evening-medicine";
+    $evmed (option-parent: $evening, option-child: $eve-medicine) isa option-edge, has link-type "optional";
+    $evening-work isa activity, has activity-name "evening-work";
+    $evwork (option-parent: $evening, option-child: $evening-work) isa option-edge, has link-type "optional";
